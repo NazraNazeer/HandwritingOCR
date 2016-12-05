@@ -207,26 +207,29 @@ void classify(Mat &image, Mat& trainingData, Mat& trainingClasses, vector<Rectan
 {
 	for (int i = 0; i < r.size(); i++)
 	{
-		Mat tmp = image(Rect(r[i].x, r[i].y, r[i].width, r[i].height));
+		Mat tmp = image(Rect(r[i].x, r[i].y, r[i].width + 4, r[i].height + 4));
 		Mat tmp2 = tmp.clone();
+		if (tmp2.cols > 3 && tmp2.rows > 5)
+		{
+			rectangle(image, Point(r[i].x, r[i].y), Point(r[i].x + r[i].width, r[i].y + r[i].height), cv::Scalar(0, 0, 255), 1);
 
-		rectangle(image, Point(r[i].x, r[i].y), Point(r[i].x + r[i].width, r[i].y + r[i].height), cv::Scalar(0, 0, 255), 1);
+			resize(tmp2, tmp2, Size(32, 48));
 
-		resize(tmp2, tmp2, Size(32, 48));
+			//imshow("TrainingROI", tmp2);
+			////imshow("TrainingImg", image);
+			//waitKey(0);
 
-		//imshow("TrainingROI", tmp2);
-		//imshow("TrainingImg", image);
+			trainingClasses.push_back(i + 97);       // add char to our floating point labels image
 
-		trainingClasses.push_back(i + 97);       // add char to our floating point labels image
+			Mat matImageFloat;
+			// convert the training region of interest to a float
+			tmp2.convertTo(matImageFloat, CV_32FC1);
 
-		Mat matImageFloat;                          
-		// convert the training region of interest to a float
-		tmp2.convertTo(matImageFloat, CV_32FC1);       
+			// flatten
+			Mat matImageFlattenedFloat = matImageFloat.reshape(1, 1);
 
-		// flatten
-		Mat matImageFlattenedFloat = matImageFloat.reshape(1, 1);       
-
-		trainingData.push_back(matImageFlattenedFloat);
+			trainingData.push_back(matImageFlattenedFloat);
+		}
 
 		tmp.release();
 		tmp2.release();

@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
 	Ptr<ml::KNearest> kNN(ml::KNearest::create());
 	Mat trainingClasses, trainingData;
 
-	for (int i = 0; i < 9; i++)
+   	for (int i = 0; i < 4; i++)
 	{
 		string imgName = "abc(" + to_string(i) + ").png";
 		Mat sourceImage = imread(imgName);
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
 		dilate(trainImage, trainImage, element);
 		erode(trainImage, trainImage, element);
 
-		imshow("final Image", trainImage);
+		imshow("Train Image thresholded", trainImage);
 		waitKey(0);
 
 		int* segH = horizontalSegments(trainImage);
@@ -86,8 +86,8 @@ int main(int argc, char* argv[]) {
 		imshow("Source image", sourceImage);
 		imshow("HSeg", segHImage);
 		imshow("VSeg", segVImage);
-		waitKey(0);
-*/
+		waitKey(0);*/
+
 
 		sourceImage.release();
 		trainImage.release();
@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
 	kNN->train(trainingData, ml::ROW_SAMPLE, trainingClasses);
 
 
-	Mat testImage = imread("t_test(4).png");
+	Mat testImage = imread("t_test(1).png");
 
 	string output;
 
@@ -122,8 +122,8 @@ int main(int argc, char* argv[]) {
 	//GaussianBlur(finalImage, finalImage, Size(3, 3), 0);
 	adaptiveThreshold(finalImage, finalImage, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 11, 2);
 
-	imshow("final Image", finalImage);
-	waitKey(0);
+	/*imshow("Final Image", finalImage);
+	waitKey(0);*/
 
 
 	// Use the thresholded image as a mask, used for certain captchas
@@ -144,7 +144,7 @@ int main(int argc, char* argv[]) {
 	dilate(finalImage, finalImage, element);
 	erode(finalImage, finalImage, element);
 
-	imshow("final Image", finalImage);
+	imshow("Final Image thresholded", finalImage);
 	waitKey(0);
 
 	int* segH = horizontalSegments(finalImage);
@@ -162,25 +162,30 @@ int main(int argc, char* argv[]) {
 
 	// Let's draw the rectangles
 	drawRectangles(finalImage, rects);
-	drawRectangles(testImage, rects);
+	//drawRectangles(testImage, rects);
 
 
 	// Display the images if necessary
 
-	imshow("Final image", finalImage);
-	imshow("Source image", testImage);
+	imshow("Final image squares", finalImage);
+	//imshow("Source image", testImage);
 	imshow("HSeg", segHImage);
 	imshow("VSeg", segVImage);
 	waitKey(0);
 
 	for (int i = 0; i < rects.size(); i++)
 	{
-		rectangle(testImage, Point(rects[i].x, rects[i].y), Point(rects[i].x + rects[i].width, rects[i].y + rects[i].height), cv::Scalar(0, 0, 255), 1);
 
-		Mat ROI = testImage(Rect(rects[i].x, rects[i].y, rects[i].width, rects[i].height));
+		Mat ROI = testImage(Rect(rects[i].x, rects[i].y, rects[i].width+4, rects[i].height+4));
 		Mat tmp = ROI.clone(); // temp of our region of interest, used for resizing and recognition
 
 		resize(tmp, tmp, Size(32, 48));
+
+		rectangle(testImage, Point(rects[i].x, rects[i].y), Point(rects[i].x + rects[i].width, rects[i].y + rects[i].height), cv::Scalar(0, 0, 255), 1);
+
+		imshow("testImage", testImage);
+		imshow("tmp", tmp);
+		waitKey(0);
 
 		Mat matROIFloat;
 		tmp.convertTo(matROIFloat, CV_32FC1);             // convert Mat to float, necessary for call to find_nearest

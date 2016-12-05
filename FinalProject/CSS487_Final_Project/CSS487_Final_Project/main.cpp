@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
 	Ptr<ml::KNearest> kNN(ml::KNearest::create());
 	Mat trainingClasses, trainingData;
 
-   	for (int i = 0; i < 4; i++)
+   	for (int i = 0; i < 9; i++)
 	{
 		string imgName = "abc(" + to_string(i) + ").png";
 		Mat sourceImage = imread(imgName);
@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
 	kNN->train(trainingData, ml::ROW_SAMPLE, trainingClasses);
 
 
-	Mat testImage = imread("t_test(1).png");
+	Mat testImage = imread("t_test(5).png");
 
 	string output;
 

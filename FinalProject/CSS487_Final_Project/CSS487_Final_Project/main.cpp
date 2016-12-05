@@ -5,106 +5,201 @@
 #include <iostream>
 #include <stdlib.h>
 
-#include "GenData.h"
+#include "Segments.h"
+#include "main.h"
 
-
-class ContourWithData {
-	public:
-		// member variables 
-		std::vector<cv::Point> ptContour;           // contour
-		cv::Rect boundingRect;                      // bounding rect for contour
-		float fltArea;                              // area of contour
-
-		// probably not the best function for testing if a contour is valid											
-		bool checkIfContourIsValid() {                              
-			if (fltArea < MIN_CONTOUR_AREA) return false;           
-			return true;                                            
-		}
-
-		// allows sorting of contours from left to right
-		static bool sortByBoundingRectXPosition(const ContourWithData& cwdLeft, const ContourWithData& cwdRight) {    
-			return(cwdLeft.boundingRect.x < cwdRight.boundingRect.x);                                                   
-		}
-
-};
+const int RESIZE_FACTOR = 2;
 
 int main(int argc, char* argv[]) {
 
-	Mat train = imread("handwriting.png"), train_thresh, test = imread("test.png"), test_thresh;
-	Mat classificationInts;
+	Ptr<ml::KNearest> kNN(ml::KNearest::create());
+	Mat trainingClasses, trainingData;
 
-	vector<vector<Point>> ptContours = getContours(train, train_thresh); // contours returned from getContours
+	for (int i = 0; i < 9; i++)
+	{
+		string imgName = "abc(" + to_string(i) + ").png";
+		Mat sourceImage = imread(imgName);
 
-	Mat trainingImagesAsFlattenedFloats = classify(classificationInts, train, train_thresh, ptContours);
+		cvtColor(sourceImage, sourceImage, COLOR_BGR2GRAY);
 
-	std::cout << "training complete\n\n";
+		// Is it loaded?
+		if (!sourceImage.data)
+			return -1;
 
-	// make kNN object
-	Ptr<ml::KNearest>  kNearest(ml::KNearest::create());
-	kNearest->train(trainingImagesAsFlattenedFloats, ml::ROW_SAMPLE, classificationInts);
+		// Resize the image by resize factor, don't need for our data set
+		//if (i > 3)
+		//	resize(sourceImage, sourceImage, Size(sourceImage.cols * RESIZE_FACTOR, sourceImage.rows * RESIZE_FACTOR));
 
-	vector<ContourWithData> allContoursWithData;           // declare empty contour vectors
-	vector<ContourWithData> validContoursWithData;
+		// Define our final image
+		Mat trainImage = sourceImage.clone();
 
-	ptContours = getContours(test, test_thresh);
 
-	// for every contour
-	for (int i = 0; i < ptContours.size(); i++) {               
-		ContourWithData contourWithData; 
+		// Apply adaptive threshold
+		//GaussianBlur(trainImage, trainImage, Size(3, 3), 0);
+		adaptiveThreshold(trainImage, trainImage, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 11, 2);
 
-		// assign contour to contour with data
-		contourWithData.ptContour = ptContours[i];  
 
-		// get bounding rectangle
-		contourWithData.boundingRect = boundingRect(contourWithData.ptContour); 
+		// Use the thresholded image as a mask, used for certain captchas
+		/*Mat tmp;
+		sourceImage.copyTo(tmp, trainImage);
+		tmp.copyTo(finalImage);
+		tmp.release();
+		*/
 
-		// calculate the contour area
-		contourWithData.fltArea = (float)contourArea(contourWithData.ptContour);
+		// Apply binary threshold, used for certain captchas and training data
+		/*threshold(trainImage, trainImage, 120, 255, THRESH_BINARY);
 
-		// add contour with data object to list of all contours with data
-		allContoursWithData.push_back(contourWithData);                                     
+		imshow("final Image", trainImage);
+		waitKey(0);*/
+
+		// Morphological closing - reduce noise in the letters
+		Mat element = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
+		dilate(trainImage, trainImage, element);
+		erode(trainImage, trainImage, element);
+
+		imshow("final Image", trainImage);
+		waitKey(0);
+
+		int* segH = horizontalSegments(trainImage);
+		int* segV = verticalSegments(trainImage);
+
+		Mat segHImage = drawHorizontalSegments(segH, trainImage.rows, trainImage.cols);
+		Mat segVImage = drawVerticalSegments(segV, trainImage.rows, trainImage.cols);
+
+		// Create pairs
+		vector<pair<int, int> > verticalPairs = createSegmentPairs(segV, trainImage.rows);
+		vector<pair<int, int> > horizontalPairs = createSegmentPairs(segH, trainImage.cols);
+
+		// Get segment squares
+		vector<Rectangle> squares = takeRectangles(shrinkRectangles(trainImage, getRectangles(verticalPairs, horizontalPairs)), 30);
+
+		classify(sourceImage, trainingData, trainingClasses, squares);
+
+		// Let's draw the rectangles
+		drawRectangles(trainImage, squares);
+		drawRectangles(sourceImage, squares);
+
+
+		// Display the images if necessary
+
+		/*imshow("Final image", trainImage);
+		imshow("Source image", sourceImage);
+		imshow("HSeg", segHImage);
+		imshow("VSeg", segVImage);
+		waitKey(0);
+*/
+
+		sourceImage.release();
+		trainImage.release();
 	}
+	
+	kNN->train(trainingData, ml::ROW_SAMPLE, trainingClasses);
 
-	for (int i = 0; i < allContoursWithData.size(); i++) {                      // for all contours
-		if (allContoursWithData[i].checkIfContourIsValid()) {                   // check if valid
-			validContoursWithData.push_back(allContoursWithData[i]);            // if so, append to valid contour list
-		}
-	}
-	// sort contours from left to right
-	std::sort(validContoursWithData.begin(), validContoursWithData.end(), ContourWithData::sortByBoundingRectXPosition);
 
-	string strFinalString;     // final string for console output
+	Mat testImage = imread("t_test(4).png");
 
-	for (int i = 0; i < validContoursWithData.size(); i++) {            
+	string output;
 
-		// for each contour draw a green rect around the current char															
-		rectangle(test, validContoursWithData[i].boundingRect, Scalar(0, 255, 0), 2);                                           
+	cvtColor(testImage, testImage, COLOR_BGR2GRAY);
 
-		Mat matROI = test_thresh(validContoursWithData[i].boundingRect);          // get ROI image of bounding rect
+	// Is it loaded?
+	if (!testImage.data)
+		return -1;
 
-		Mat matROIResized;
-		// resize image, this will be more consistent for recognition and storage
-		resize(matROI, matROIResized, cv::Size(RESIZED_IMAGE_WIDTH, RESIZED_IMAGE_HEIGHT));
+	imshow("test Image", testImage);
+	waitKey(0);
+
+	// Resize the image by resize factor, don't need for our data set
+	//resize(sourceImage, sourceImage, Size(sourceImage.cols * RESIZE_FACTOR, sourceImage.rows * RESIZE_FACTOR));
+
+	// Define our final image
+	Mat finalImage = testImage.clone();
+
+	/*imshow("final Image", finalImage);
+	waitKey(0);*/
+
+	// Apply adaptive threshold
+	//GaussianBlur(finalImage, finalImage, Size(3, 3), 0);
+	adaptiveThreshold(finalImage, finalImage, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 11, 2);
+
+	imshow("final Image", finalImage);
+	waitKey(0);
+
+
+	// Use the thresholded image as a mask, used for certain captchas
+	/*Mat tmp;
+	sourceImage.copyTo(tmp, trainImage);
+	tmp.copyTo(finalImage);
+	tmp.release();
+	*/
+
+	// Apply binary threshold, used for certain captchas and training data
+	/*threshold(trainImage, trainImage, 120, 255, THRESH_BINARY);
+
+	imshow("final Image", trainImage);
+	waitKey(0);*/
+
+	// Morphological closing - reduce noise in the letters
+	Mat element = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
+	dilate(finalImage, finalImage, element);
+	erode(finalImage, finalImage, element);
+
+	imshow("final Image", finalImage);
+	waitKey(0);
+
+	int* segH = horizontalSegments(finalImage);
+	int* segV = verticalSegments(finalImage);
+
+	Mat segHImage = drawHorizontalSegments(segH, finalImage.rows, finalImage.cols);
+	Mat segVImage = drawVerticalSegments(segV, finalImage.rows, finalImage.cols);
+
+	// Create pairs
+	vector<pair<int, int> > verticalPairs = createSegmentPairs(segV, finalImage.rows);
+	vector<pair<int, int> > horizontalPairs = createSegmentPairs(segH, finalImage.cols);
+
+	// Get segment squares
+	vector<Rectangle> rects = takeRectangles(shrinkRectangles(finalImage, getRectangles(verticalPairs, horizontalPairs)), 90);
+
+	// Let's draw the rectangles
+	drawRectangles(finalImage, rects);
+	drawRectangles(testImage, rects);
+
+
+	// Display the images if necessary
+
+	imshow("Final image", finalImage);
+	imshow("Source image", testImage);
+	imshow("HSeg", segHImage);
+	imshow("VSeg", segVImage);
+	waitKey(0);
+
+	for (int i = 0; i < rects.size(); i++)
+	{
+		rectangle(testImage, Point(rects[i].x, rects[i].y), Point(rects[i].x + rects[i].width, rects[i].y + rects[i].height), cv::Scalar(0, 0, 255), 1);
+
+		Mat ROI = testImage(Rect(rects[i].x, rects[i].y, rects[i].width, rects[i].height));
+		Mat tmp = ROI.clone(); // temp of our region of interest, used for resizing and recognition
+
+		resize(tmp, tmp, Size(32, 48));
 
 		Mat matROIFloat;
-		matROIResized.convertTo(matROIFloat, CV_32FC1);             // convert Mat to float, necessary for call to find_nearest
+		tmp.convertTo(matROIFloat, CV_32FC1);             // convert Mat to float, necessary for call to find_nearest
 
-		Mat matROIFlattenedFloat = matROIFloat.reshape(1, 1);
+		Mat ROIFlattenedFloat = matROIFloat.reshape(1, 1);
 
-		Mat matCurrentChar(0, 0, CV_32F);
+		Mat currentChar(0, 0, CV_32F);
 
-		kNearest->findNearest(matROIFlattenedFloat, 1, matCurrentChar);     
+		kNN->findNearest(ROIFlattenedFloat, 1, currentChar);
 
-		float fltCurrentChar = (float)matCurrentChar.at<float>(0, 0);
+		float fltCurrentChar = (float)currentChar.at<float>(0, 0);
 
-		strFinalString = strFinalString + char(int(fltCurrentChar));        // append current char to full string
+		output = output + char(int(fltCurrentChar));        // append current char to full string
 	}
+	
 
-	std::cout << "\n\n" << "numbers read = " << strFinalString << "\n\n";       // show the full string
+	cout << output << endl;
 
-	imshow("test", test);     // show input image with green boxes drawn around found digits
-
-	waitKey(0);                                         
+	waitKey(0);
 
 	return 0;
 }

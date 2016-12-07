@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
 	kNN->train(trainingData, ml::ROW_SAMPLE, trainingClasses);
 
 
-	Mat testImage = imread("t_test(4).png");
+	Mat testImage = imread("t_test(1).png");
 
 	imshow("test Image", testImage);
 	waitKey(0);

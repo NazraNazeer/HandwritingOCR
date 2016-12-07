@@ -1,3 +1,15 @@
+/* main.cpp
+*
+* Created by Kyle Farmer, Johan Brusa, and Tyler Hilde
+*
+* The purpose of this class is to handle the flow of the program.
+* First, training images are loaded, manipulated, and classified
+* into contours. Then, a test image is loaded, thresholded, eroded,
+* and dilated. The program then uses k-nearest neighbors to match
+* contours in the test image with the training data. Finally,
+* the result is outputted to the console as a string.
+*/
+
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -6,172 +18,62 @@
 #include <stdlib.h>
 
 #include "Segments.h"
-#include "main.h"
+#include "Preprocess.h"
 
-const int RESIZE_FACTOR = 2;
+//const int RESIZE_FACTOR = 1.4;
 
 int main(int argc, char* argv[]) {
 
 	Ptr<ml::KNearest> kNN(ml::KNearest::create());
-	Mat trainingClasses, trainingData;
+	Mat trainingClasses, trainingData; // float images used to train our k nearest object
 
    	for (int i = 0; i < 4; i++)
 	{
 		string imgName = "abc(" + to_string(i) + ").png";
 		Mat sourceImage = imread(imgName);
 
-		cvtColor(sourceImage, sourceImage, COLOR_BGR2GRAY);
-
-		// Is it loaded?
-		if (!sourceImage.data)
-			return -1;
-
-		// Resize the image by resize factor, don't need for our data set
-		//if (i > 3)
-		//	resize(sourceImage, sourceImage, Size(sourceImage.cols * RESIZE_FACTOR, sourceImage.rows * RESIZE_FACTOR));
-
-		// Define our final image
-		Mat trainImage = sourceImage.clone();
-
-
-		// Apply adaptive threshold
-		//GaussianBlur(trainImage, trainImage, Size(3, 3), 0);
-		adaptiveThreshold(trainImage, trainImage, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 11, 2);
-
-
-		// Use the thresholded image as a mask, used for certain captchas
-		/*Mat tmp;
-		sourceImage.copyTo(tmp, trainImage);
-		tmp.copyTo(trainImage);
-		tmp.release();
-		*/
-
-		// Apply binary threshold, used for certain captchas and training data
-		/*threshold(trainImage, trainImage, 120, 255, THRESH_BINARY);*/
-
-		// Morphological closing - reduce noise in the letters, allows for better segmentation
-		Mat element = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
-		dilate(trainImage, trainImage, element);
-		erode(trainImage, trainImage, element);
+		Mat trainImage = preprocessImage(sourceImage);
 
 		imshow("Train Image thresholded", trainImage);
 		waitKey(0);
 
-		int* segH = horizontalSegments(trainImage);
-		int* segV = verticalSegments(trainImage);
-
-		Mat segHImage = drawHorizontalSegments(segH, trainImage.rows, trainImage.cols);
-		Mat segVImage = drawVerticalSegments(segV, trainImage.rows, trainImage.cols);
-
-		// Create pairs
-		vector<pair<int, int> > verticalPairs = createSegmentPairs(segV, trainImage.rows);
-		vector<pair<int, int> > horizontalPairs = createSegmentPairs(segH, trainImage.cols);
-
-		// Get segment squares
-		vector<Rectangle> squares = takeRectangles(shrinkRectangles(trainImage, getRectangles(verticalPairs, horizontalPairs)), 30);
+		// segment our training image and return the vector of squares for each segement, 30 refers to max number of squares
+		vector<Rectangle> squares = segmentation(trainImage, 30);
 
 		classify(sourceImage, trainingData, trainingClasses, squares);
-
-		// Let's draw the rectangles
-		drawRectangles(trainImage, squares);
-		drawRectangles(sourceImage, squares);
-
-
-		// Display the images if necessary
-
-		/*imshow("Final image", trainImage);
-		imshow("Source image", sourceImage);
-		imshow("HSeg", segHImage);
-		imshow("VSeg", segVImage);
-		waitKey(0);*/
-
 
 		sourceImage.release();
 		trainImage.release();
 	}
 	
+	// trainingData and classes has been constructed so we can call train on our kNN object
 	kNN->train(trainingData, ml::ROW_SAMPLE, trainingClasses);
 
 
-	Mat testImage = imread("test.png");
-
-	string output;
-
-	cvtColor(testImage, testImage, COLOR_BGR2GRAY);
-
-	// Is it loaded?
-	if (!testImage.data)
-		return -1;
+	Mat testImage = imread("t_test(4).png");
 
 	imshow("test Image", testImage);
 	waitKey(0);
 
-	// Resize the image by resize factor, don't need for our data set
-	//resize(sourceImage, sourceImage, Size(sourceImage.cols * RESIZE_FACTOR, sourceImage.rows * RESIZE_FACTOR));
+	string output;
 
-	// Define our final image
-	Mat finalImage = testImage.clone();
-
-	/*imshow("final Image", finalImage);
-	waitKey(0);*/
-
-	// Apply adaptive threshold
-	adaptiveThreshold(finalImage, finalImage, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 11, 2);
-
-
-	// Use the thresholded image as a mask, used for certain captchas
-	/*Mat tmp;
-	sourceImage.copyTo(tmp, trainImage);
-	tmp.copyTo(finalImage);
-	tmp.release();
-	*/
-
-	// Apply binary threshold, used for certain captchas and training data
-	/*threshold(trainImage, trainImage, 120, 255, THRESH_BINARY);
-
-	imshow("final Image", trainImage);
-	waitKey(0);*/
-
-	// Morphological closing - reduce noise in the letters
-	Mat element = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
-	dilate(finalImage, finalImage, element);
-	erode(finalImage, finalImage, element);
+	Mat finalImage = preprocessImage(testImage);
 
 	imshow("Final Image thresholded", finalImage);
 	waitKey(0);
 
-	int* segH = horizontalSegments(finalImage);
-	int* segV = verticalSegments(finalImage);
+	// 90 hard coded for now, if we know the length of the string before hand we can determine a more realistic max for squares
+	vector<Rectangle> rects = segmentation(finalImage, 90);
 
-	Mat segHImage = drawHorizontalSegments(segH, finalImage.rows, finalImage.cols);
-	Mat segVImage = drawVerticalSegments(segV, finalImage.rows, finalImage.cols);
-
-	// Create pairs
-	vector<pair<int, int> > verticalPairs = createSegmentPairs(segV, finalImage.rows);
-	vector<pair<int, int> > horizontalPairs = createSegmentPairs(segH, finalImage.cols);
-
-	// Get segment squares
-	vector<Rectangle> rects = takeRectangles(shrinkRectangles(finalImage, getRectangles(verticalPairs, horizontalPairs)), 90);
-
-	// Let's draw the rectangles
-	drawRectangles(finalImage, rects);
-	//drawRectangles(testImage, rects);
-
-
-	// Display the images if necessary
-
-	imshow("Final image squares", finalImage);
-	//imshow("Source image", testImage);
-	imshow("HSeg", segHImage);
-	imshow("VSeg", segVImage);
-	waitKey(0);
-
+	// for each rectangle found
 	for (int i = 0; i < rects.size(); i++)
 	{
-
+		// get the region of interest from our rectangle region in the test image, 
+		// extend the width and height slightly to achieve better results
 		Mat ROI = testImage(Rect(rects[i].x, rects[i].y, rects[i].width+4, rects[i].height+4));
 		Mat tmp = ROI.clone(); // temp of our region of interest, used for resizing and recognition
 
+		// resize for consistency in matching
 		resize(tmp, tmp, Size(32, 48));
 
 		// used for testing
@@ -182,20 +84,19 @@ int main(int argc, char* argv[]) {
 		waitKey(0);*/
 
 		Mat ROIFloat;
-		tmp.convertTo(ROIFloat, CV_32FC1);             // convert Mat to float, necessary for call to find_nearest
+		tmp.convertTo(ROIFloat, CV_32FC1); // convert Mat to float, necessary for call to findNearest
 
 		Mat ROIFlattenedFloat = ROIFloat.reshape(1, 1);
 
 		Mat currentChar(0, 0, CV_32F);
 
-		kNN->findNearest(ROIFlattenedFloat, 2, currentChar); // k = 1
+		kNN->findNearest(ROIFlattenedFloat, 1, currentChar); // k = 1
 
 		float fltCurrentChar = (float)currentChar.at<float>(0, 0);
 
-		output = output + char(int(fltCurrentChar));        // append current char to full string
+		output = output + char(int(fltCurrentChar)); // append current char to full string
 	}
 	
-
 	cout << output << endl;
 
 	waitKey(0);

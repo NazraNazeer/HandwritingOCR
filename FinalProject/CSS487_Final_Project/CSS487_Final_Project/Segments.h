@@ -34,4 +34,6 @@ vector<Rectangle> takeRectangles(vector<Rectangle> r, int number);
 void classify(Mat &image, Mat& trainingData, Mat& trainingClasses, vector<Rectangle> r);
 void drawRectangles(Mat& im, vector<Rectangle> r);
 
+vector<Rectangle> segmentation(void*);
+
 #endif

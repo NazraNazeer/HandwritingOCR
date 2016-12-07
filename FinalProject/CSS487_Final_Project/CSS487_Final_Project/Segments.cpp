@@ -18,7 +18,7 @@ void initArray(int* a, int length)
 }
 
 // Preconditions: Grayscale image of the text to be decoded
-// Postconditions: 
+// Postconditions: Segment array
 // For each column in the image, add 1 to the segment array everytime a pixel is encountered that is not 0. 
 // Each pixel is 0 to 255, so 0 indicates text or a line, anything above indicates space. 
 // This segment array will tell us which columns in the image have letters by
@@ -31,8 +31,9 @@ int* horizontalSegments(Mat& src)
 	for (int i = 0; i < src.cols; i++) {
  		for (int k = 0; k < src.rows; k++) 
 		{
-			uchar pixel = src.data[src.cols * k + i];
-
+			// extract pixels by treating the data array like a 1d array 
+			uchar pixel = src.data[src.cols * k + i]; 
+			// if pixel is above 0, add 1 to the bin
 			if (pixel)
 				seg[i] += 1;
  		}
@@ -160,7 +161,7 @@ vector<Rectangle> shrinkRectangles(Mat& image, vector<Rectangle> squares) {
 		for (int y = 0; y < tmp.rows; y++) {
 			for (int x = 0; x < tmp.cols; x++) {
 				int pixel = tmp.data[x + y * tmp.cols];
-
+				
 				if (pixel) {
 					tmp.data[x + y * tmp.cols] = 127;
 					if (top == -1) 
@@ -219,6 +220,7 @@ void classify(Mat &image, Mat& trainingData, Mat& trainingClasses, vector<Rectan
 			////imshow("TrainingImg", image);
 			//waitKey(0);
 
+			// i+97 for starting at lowercase 'a' ASCII value
 			trainingClasses.push_back(i + 97);       // add char to our floating point labels image
 
 			Mat matImageFloat;
@@ -240,4 +242,28 @@ void drawRectangles(Mat& im, vector<Rectangle> r)
 {
 	for (int i = 0; i < r.size(); i++)
 		rectangle(im, Point(r[i].x, r[i].y), Point(r[i].x + r[i].width, r[i].y + r[i].height), Scalar(255));
+}
+
+vector<Rectangle> segmentation(Mat& img, int numSquares)
+{
+	int* segH = horizontalSegments(img);
+	int* segV = verticalSegments(img);
+
+	Mat segHImage = drawHorizontalSegments(segH, img.rows, img.cols);
+	Mat segVImage = drawVerticalSegments(segV, img.rows, img.cols);
+
+	// Create pairs
+	vector<pair<int, int> > verticalPairs = createSegmentPairs(segV, img.rows);
+	vector<pair<int, int> > horizontalPairs = createSegmentPairs(segH, img.cols);
+
+	// Get segment squares
+	vector<Rectangle> rects = takeRectangles(shrinkRectangles(img, getRectangles(verticalPairs, horizontalPairs)), numSquares);
+
+	// Display the images if necessare
+	/*imshow("Image rectangles", img);
+	imshow("Horizontal Segments", segHImage);
+	imshow("Vertical Segments", segVImage);
+	waitKey(0);
+*/
+	return rects;
 }
